@@ -53,15 +53,13 @@ uint8_t const desc_hid_report_vendor[] = {TUD_HID_REPORT_DESC_VENDOR_CTRL(HID_RE
 // Application return pointer to descriptor
 // Descriptor contents must exist long enough for transfer to complete
 uint8_t const *tud_hid_descriptor_report_cb(uint8_t instance) {
-    if (global_state.config_mode_active)
-        if (instance == ITF_NUM_HID_VENDOR)
-            return desc_hid_report_vendor;
-
     switch(instance) {
         case ITF_NUM_HID:
             return desc_hid_report;
         case ITF_NUM_HID_REL_M:
             return desc_hid_report_relmouse;
+        case ITF_NUM_HID_VENDOR:
+            return desc_hid_report_vendor;
         default:
             return desc_hid_report;
     }
@@ -170,21 +168,21 @@ uint16_t const *tud_descriptor_string_cb(uint8_t index, uint16_t langid) {
 
 #ifndef DH_DEBUG
 
-#define ITF_NUM_TOTAL 2
+#define ITF_NUM_TOTAL 3
 #define ITF_NUM_TOTAL_CONFIG 4
-#define CONFIG_TOTAL_LEN (TUD_CONFIG_DESC_LEN + 2 * TUD_HID_DESC_LEN)
+#define CONFIG_TOTAL_LEN (TUD_CONFIG_DESC_LEN + 3 * TUD_HID_DESC_LEN)
 #define CONFIG_TOTAL_LEN_CFG (TUD_CONFIG_DESC_LEN + 3 * TUD_HID_DESC_LEN + TUD_MSC_DESC_LEN)
 
 #else
 /* CDC uses 2 interfaces (control + data). In normal mode, place it right after
-   the 2 HID interfaces (at 2, 3). In config mode, place it after HID_VENDOR (2)
+   the 3 HID interfaces (at 3, 4). In config mode, place it after HID_VENDOR (2)
    and MSC (3), so at 4, 5. */
-#define ITF_NUM_CDC 2
+#define ITF_NUM_CDC 3
 #define ITF_NUM_CDC_CONFIG 4
-#define ITF_NUM_TOTAL 4
+#define ITF_NUM_TOTAL 5
 #define ITF_NUM_TOTAL_CONFIG 6
 
-#define CONFIG_TOTAL_LEN (TUD_CONFIG_DESC_LEN + 2 * TUD_HID_DESC_LEN + TUD_CDC_DESC_LEN)
+#define CONFIG_TOTAL_LEN (TUD_CONFIG_DESC_LEN + 3 * TUD_HID_DESC_LEN + TUD_CDC_DESC_LEN)
 #define CONFIG_TOTAL_LEN_CFG (TUD_CONFIG_DESC_LEN + 3 * TUD_HID_DESC_LEN + TUD_MSC_DESC_LEN + TUD_CDC_DESC_LEN)
 
 #define EPNUM_CDC_NOTIF  0x85
@@ -212,6 +210,14 @@ uint8_t const desc_configuration[] = {
                        HID_ITF_PROTOCOL_NONE,
                        sizeof(desc_hid_report_relmouse),
                        EPNUM_HID_REL_M,
+                       CFG_TUD_HID_EP_BUFSIZE,
+                       1),
+
+    TUD_HID_DESCRIPTOR(ITF_NUM_HID_VENDOR,
+                       STRID_VENDOR,
+                       HID_ITF_PROTOCOL_NONE,
+                       sizeof(desc_hid_report_vendor),
+                       EPNUM_HID_VENDOR,
                        CFG_TUD_HID_EP_BUFSIZE,
                        1),
 #ifdef DH_DEBUG

@@ -378,6 +378,38 @@ void handle_heartbeat_msg(uart_packet_t *packet, device_t *state) {
 }
 
 
+/* Emit a sequence of (modifier, keycode) keystroke pairs as keyboard HID reports.
+   Wire format: 4 pairs per packet (8 bytes). A pair with keycode==0 terminates.
+   The client owns all char-to-keycode mapping; this handler is layout-agnostic.
+
+   Safety: pairs are restricted to the printable typing range (a-z, 0-9, punctuation,
+   space, enter, tab) and Shift is the only allowed modifier. This narrows what a
+   buggy or compromised client can make the device do — Ctrl/Alt/GUI chords and
+   F-keys, which can drive system commands, are silently rejected.
+
+   Pacing: 1 keydown + 2 release/idle reports per stroke = 1.5 ms at 2000 Hz drain. */
+void handle_text_paste_msg(uart_packet_t *packet, device_t *state) {
+    const uint8_t allowed_modifier_mask = KEYBOARD_MODIFIER_LEFTSHIFT | KEYBOARD_MODIFIER_RIGHTSHIFT;
+    hid_keyboard_report_t empty_report = {0};
+
+    for (int i = 0; i + 1 < PACKET_DATA_LENGTH; i += 2) {
+        uint8_t modifier = packet->data[i];
+        uint8_t keycode  = packet->data[i + 1];
+        if (keycode == 0)
+            break;
+        if ((modifier & ~allowed_modifier_mask) != 0)
+            continue;
+        if (keycode < HID_KEY_A || keycode > HID_KEY_SLASH)
+            continue;
+
+        hid_keyboard_report_t down = {.modifier = modifier, .keycode = {keycode}};
+        queue_kbd_report(&down, state);
+        for (int j = 0; j < 2; j++)
+            queue_kbd_report(&empty_report, state);
+    }
+}
+
+
 /* ==================================================== *
  * ==============  Output Switch Routines  ============ *
  * ==================================================== */

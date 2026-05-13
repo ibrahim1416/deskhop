@@ -44,11 +44,6 @@ void tud_hid_set_report_cb(uint8_t instance,
 
     /* We received a report on the config report ID */
     if (instance == ITF_NUM_HID_VENDOR && report_id == REPORT_ID_VENDOR) {
-        /* Security - only if config mode is enabled are we allowed to do anything. While the report_id
-           isn't even advertised when not in config mode, security must always be explicit and never assume */
-        if (!global_state.config_mode_active)
-            return;
-
         /* We insist on a fixed size packet. No overflows. */
         if (bufsize != RAW_PACKET_LENGTH)
             return;
@@ -57,6 +52,18 @@ void tud_hid_set_report_cb(uint8_t instance,
 
         /* Only a certain packet types are accepted */
         if (!validate_packet(packet))
+            return;
+
+        /* Text-paste packets bypass the config-mode gate and are forwarded over UART
+           to the other Pico, which types the characters out as keyboard reports. */
+        if (packet->type == TEXT_PASTE_MSG) {
+            queue_packet(packet->data, TEXT_PASTE_MSG, PACKET_DATA_LENGTH);
+            return;
+        }
+
+        /* All other vendor packets are config-mode commands and require config mode.
+           Security must always be explicit and never assume. */
+        if (!global_state.config_mode_active)
             return;
 
         process_packet(packet, &global_state);

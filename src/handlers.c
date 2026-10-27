@@ -389,9 +389,18 @@ void handle_heartbeat_msg(uart_packet_t *packet, device_t *state) {
 
    The one exception is exactly Left Alt + Left Shift + 1 / 2, which the receiving PC
    is configured to use as "switch to English / Arabic layout" so the client can type
-   mixed-script text.
+   mixed-script text. It is typed like a human would: modifiers down, then the digit,
+   then release in reverse order, each step held for a few reports. Windows' input
+   language hotkeys don't reliably fire when everything arrives in a single report.
 
    Pacing: 1 keydown + 2 release/idle reports per stroke = 1.5 ms at 2000 Hz drain. */
+#define LAYOUT_SWITCH_HOLD_REPORTS 10
+
+static void queue_kbd_report_n(hid_keyboard_report_t *report, int n, device_t *state) {
+    for (int i = 0; i < n; i++)
+        queue_kbd_report(report, state);
+}
+
 void handle_text_paste_msg(uart_packet_t *packet, device_t *state) {
     const uint8_t allowed_modifier_mask = KEYBOARD_MODIFIER_LEFTSHIFT | KEYBOARD_MODIFIER_RIGHTSHIFT;
     const uint8_t layout_switch_modifier = KEYBOARD_MODIFIER_LEFTALT | KEYBOARD_MODIFIER_LEFTSHIFT;
@@ -405,17 +414,24 @@ void handle_text_paste_msg(uart_packet_t *packet, device_t *state) {
 
         bool is_layout_switch = modifier == layout_switch_modifier
                                 && (keycode == HID_KEY_1 || keycode == HID_KEY_2);
-        if (!is_layout_switch) {
-            if ((modifier & ~allowed_modifier_mask) != 0)
-                continue;
-            if (keycode < HID_KEY_A || keycode > HID_KEY_SLASH)
-                continue;
+        hid_keyboard_report_t down = {.modifier = modifier, .keycode = {keycode}};
+
+        if (is_layout_switch) {
+            hid_keyboard_report_t mods_only = {.modifier = modifier};
+            queue_kbd_report_n(&mods_only, LAYOUT_SWITCH_HOLD_REPORTS, state);
+            queue_kbd_report_n(&down, LAYOUT_SWITCH_HOLD_REPORTS, state);
+            queue_kbd_report_n(&mods_only, LAYOUT_SWITCH_HOLD_REPORTS, state);
+            queue_kbd_report_n(&empty_report, LAYOUT_SWITCH_HOLD_REPORTS, state);
+            continue;
         }
 
-        hid_keyboard_report_t down = {.modifier = modifier, .keycode = {keycode}};
+        if ((modifier & ~allowed_modifier_mask) != 0)
+            continue;
+        if (keycode < HID_KEY_A || keycode > HID_KEY_SLASH)
+            continue;
+
         queue_kbd_report(&down, state);
-        for (int j = 0; j < 2; j++)
-            queue_kbd_report(&empty_report, state);
+        queue_kbd_report_n(&empty_report, 2, state);
     }
 }
 

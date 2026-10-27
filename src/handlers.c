@@ -387,9 +387,14 @@ void handle_heartbeat_msg(uart_packet_t *packet, device_t *state) {
    buggy or compromised client can make the device do — Ctrl/Alt/GUI chords and
    F-keys, which can drive system commands, are silently rejected.
 
+   The one exception is exactly Left Alt + Left Shift + 1 / 2, which the receiving PC
+   is configured to use as "switch to English / Arabic layout" so the client can type
+   mixed-script text.
+
    Pacing: 1 keydown + 2 release/idle reports per stroke = 1.5 ms at 2000 Hz drain. */
 void handle_text_paste_msg(uart_packet_t *packet, device_t *state) {
     const uint8_t allowed_modifier_mask = KEYBOARD_MODIFIER_LEFTSHIFT | KEYBOARD_MODIFIER_RIGHTSHIFT;
+    const uint8_t layout_switch_modifier = KEYBOARD_MODIFIER_LEFTALT | KEYBOARD_MODIFIER_LEFTSHIFT;
     hid_keyboard_report_t empty_report = {0};
 
     for (int i = 0; i + 1 < PACKET_DATA_LENGTH; i += 2) {
@@ -397,10 +402,15 @@ void handle_text_paste_msg(uart_packet_t *packet, device_t *state) {
         uint8_t keycode  = packet->data[i + 1];
         if (keycode == 0)
             break;
-        if ((modifier & ~allowed_modifier_mask) != 0)
-            continue;
-        if (keycode < HID_KEY_A || keycode > HID_KEY_SLASH)
-            continue;
+
+        bool is_layout_switch = modifier == layout_switch_modifier
+                                && (keycode == HID_KEY_1 || keycode == HID_KEY_2);
+        if (!is_layout_switch) {
+            if ((modifier & ~allowed_modifier_mask) != 0)
+                continue;
+            if (keycode < HID_KEY_A || keycode > HID_KEY_SLASH)
+                continue;
+        }
 
         hid_keyboard_report_t down = {.modifier = modifier, .keycode = {keycode}};
         queue_kbd_report(&down, state);
